@@ -1,0 +1,64 @@
+# Inputs
+# region
+# queue_name_prefix, e.g., Dweezil-InboundResponses
+# username, e.g., rcollimore (only used for dev deploy)
+# resource_suffix, e.g., dev-rcollimore, sandbox
+
+base_stage:
+  project_name: Dweezil-Webhook
+  aws_environment_variables:
+    QUEUE_NAME: {queue_name_prefix}-{resource_suffix}
+  debug: true
+  log_level: DEBUG
+  apigateway_description: Dweezil webhook handler to enqueue responses in SQS
+  lambda_description: Dweezil response webhook handler
+  app_function: dweezil.webhook_handler.app
+  aws_region: {region}
+  profile_name: default
+  runtime: python3.6
+  s3_bucket: mothers-zappa-{region}
+  timeout_seconds: 15
+  xray_tracing: true
+  memory_size: 128
+  attach_policy: tmp/attach_policy.json
+  events:
+  - function: dweezil.s3_put_handler
+    event_source:
+      arn:  arn:aws:s3:::dweezil-source-test-us-east-2
+      events:
+        - s3:ObjectCreated:*
+
+dev_{username}:
+  extends: base_stage
+  domain: dweezil-webhook-{resource_suffix}.doorwall.haus
+
+  authorizer:
+    function: dweezil.authorizer.lambda_handler
+    token_source: Authorization
+    validation_expression: "^Bearer \\w+$"
+    result_ttl: 0 # no result caching
+
+  # cert is only in us-east-1, so hardcoded. cert is on *.example.org, so shared
+  certificate_arn: arn:aws:acm:us-east-1:XXXXXXXXXXXXXX:certificate/XXXX-XXXX-XXXX-XXXX
+
+fixed_env_stage:
+  extends: base_stage
+  authorizer:
+    function: dweezil.authorizer.lambda_handler
+    token_source: Authorization
+    validation_expression: "^Bearer \\w+$"
+
+sandbox:
+  extends: fixed_env_stage
+  domain: dweezil-webhook-sandbox.example.org
+  certificate_arn: arn:aws:acm:us-east-1:XXXXXXXXXXXXXX:certificate/XXXX-XXXX-XXXX-XXXX
+
+qa:
+  extends: fixed_env_stage
+  domain: dweezil-webhook-qa.example.org
+  certificate_arn: arn:aws:acm:us-east-1:XXXXXXXXXXXXXX:certificate/XXXX-XXXX-XXXX-XXXX
+
+production:
+  extends: fixed_env_stage
+  domain: dweezil-webhook.example.com
+  certificate_arn: arn:aws:acm:us-east-1:XXXXXXXXXXXXXX:certificate/XXXX-XXXX-XXXX-XXXX
